@@ -194,11 +194,11 @@
 	</struct>
 
 	<struct name="Position">
-		<member name="Coordinates" type="single" rows="3"/>
+		<member name="Coordinates" type="double" rows="3"/>
 	</struct>
 
 	<struct name="Position2D">
-		<member name="Coordinates" type="single" rows="2"/>
+		<member name="Coordinates" type="double" rows="2"/>
 	</struct>
 
 	<struct name="CompositeConstituent">
