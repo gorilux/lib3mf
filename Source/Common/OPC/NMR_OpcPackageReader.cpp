@@ -54,7 +54,7 @@ namespace NMR {
 			case ZIP_SOURCE_SUPPORTS:
 				zip_int64_t bitmap;
 				bitmap = zip_source_make_command_bitmap(ZIP_SOURCE_OPEN, ZIP_SOURCE_READ, ZIP_SOURCE_CLOSE,
-					ZIP_SOURCE_STAT, ZIP_SOURCE_ERROR, ZIP_SOURCE_SEEK, ZIP_SOURCE_TELL, ZIP_SOURCE_SUPPORTS, -1);
+					ZIP_SOURCE_STAT, ZIP_SOURCE_ERROR, ZIP_SOURCE_FREE, ZIP_SOURCE_SEEK, ZIP_SOURCE_TELL, ZIP_SOURCE_SUPPORTS, -1);
 				return bitmap;
 
 			case ZIP_SOURCE_SEEK:
@@ -94,13 +94,16 @@ namespace NMR {
 				zipStat->valid |= ZIP_STAT_SIZE;
 				return sizeof(zip_stat_t);
 
+			case ZIP_SOURCE_FREE:
+				return 0;
+
 			default:
 				throw CNMRException(NMR_ERROR_ZIPCALLBACK);
 		}
 		return -1;
 	}
 
-	COpcPackageReader::COpcPackageReader(_In_ PImportStream pImportStream, _In_ PModelReaderWarnings pWarnings, _In_ PProgressMonitor pProgressMonitor)
+	COpcPackageReader::COpcPackageReader(_In_ PImportStream pImportStream, _In_ PModelWarnings pWarnings, _In_ PProgressMonitor pProgressMonitor)
 		: m_pWarnings(pWarnings), m_pProgressMonitor(pProgressMonitor)
 	{
 		if (!pImportStream)
@@ -113,7 +116,7 @@ namespace NMR {
 		m_ZIPError.sys_err = 0;
 		m_ZIPError.zip_err = 0;
 		m_ZIParchive = nullptr;
-		m_ZIPsource = nullptr;
+		zip_source_t* pZIPsource = nullptr;
 
 		try {
 			// determine stream size
@@ -129,20 +132,20 @@ namespace NMR {
 			bool bUseCallback = true;
 			if (bUseCallback) {
 				// read ZIP from callback: faster and requires less memory
-				m_ZIPsource = zip_source_function_create(custom_zip_source_callback, pImportStream.get(), &m_ZIPError);
+				pZIPsource = zip_source_function_create(custom_zip_source_callback, pImportStream.get(), &m_ZIPError);
 			}
 			else {
 				// read ZIP into memory
 				m_Buffer.resize((size_t)nStreamSize);
 				pImportStream->readBuffer(&m_Buffer[0], nStreamSize, true);
-				m_ZIPsource = zip_source_buffer_create(&m_Buffer[0], (size_t)nStreamSize, 0, &m_ZIPError);
+				pZIPsource = zip_source_buffer_create(&m_Buffer[0], (size_t)nStreamSize, 0, &m_ZIPError);
 			}
-			if (m_ZIPsource == nullptr)
+			if (pZIPsource == nullptr)
 				throw CNMRException(NMR_ERROR_COULDNOTREADZIPFILE);
 
-			m_ZIParchive = zip_open_from_source(m_ZIPsource, ZIP_RDONLY | ZIP_CHECKCONS, &m_ZIPError);
+			m_ZIParchive = zip_open_from_source(pZIPsource, ZIP_RDONLY | ZIP_CHECKCONS, &m_ZIPError);
 			if (m_ZIParchive == nullptr) {
-				m_ZIParchive = zip_open_from_source(m_ZIPsource, ZIP_RDONLY, &m_ZIPError);
+				m_ZIParchive = zip_open_from_source(pZIPsource, ZIP_RDONLY, &m_ZIPError);
 				if (m_ZIParchive == nullptr)
 					throw CNMRException(NMR_ERROR_COULDNOTREADZIPFILE);
 				else
@@ -200,7 +203,7 @@ namespace NMR {
 				}
 				else {
 					if (bMustBeUnique)
-						m_pWarnings->addException(CNMRException(NMR_ERROR_OPCRELATIONSHIPNOTUNIQUE), eModelReaderWarningLevel::mrwInvalidOptionalValue);
+						m_pWarnings->addException(CNMRException(NMR_ERROR_OPCRELATIONSHIPNOTUNIQUE), eModelWarningLevel::mrwInvalidOptionalValue);
 				}
 
 			}
@@ -215,13 +218,9 @@ namespace NMR {
 		if (m_ZIParchive != nullptr)
 			zip_close(m_ZIParchive);
 
-		if (m_ZIPsource != nullptr)
-			zip_source_close(m_ZIPsource);
-
 		zip_error_fini(&m_ZIPError);
 		m_Buffer.resize(0);
 
-		m_ZIPsource = nullptr;
 		m_ZIParchive = nullptr;
 	}
 
@@ -302,7 +301,7 @@ namespace NMR {
 		}
 	}
 
-	nfUint64 COpcPackageReader::GetPartSize(_In_ std::string sPath)
+	nfUint64 COpcPackageReader::getPartSize(_In_ std::string sPath)
 	{
 		std::string sRealPath = fnRemoveLeadingPathDelimiter(sPath);
 		auto iIterator = m_ZIPEntries.find(sRealPath);
