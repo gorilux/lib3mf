@@ -43,7 +43,7 @@ namespace NMR {
 	typedef int nfInt32;
 	typedef int nfError;
 	typedef bool nfBool;
-	typedef float nfFloat;
+	typedef double nfFloat;
 	typedef double nfDouble;
 	typedef unsigned int nfUint32;
 	typedef unsigned int nfColor;
